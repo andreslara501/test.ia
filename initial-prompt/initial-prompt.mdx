@@ -1,0 +1,111 @@
+# AUTOMATED TESTING IMPLEMENTATION REQUEST
+
+## CONTEXT
+I have a comprehensive, modular testing documentation system in `.github/instructions/` that provides framework-specific testing strategies, universal patterns, and tool configurations. I need you to analyze my Angular project and implement a complete testing suite following these established best practices.
+
+## OBJECTIVE
+Generate comprehensive tests for my Angular application using the testing strategies defined in the `.github/instructions/` documentation, specifically focusing on the Angular framework guides.
+
+## REQUIREMENTS
+
+### 1. DOCUMENTATION ANALYSIS
+- Read and understand the testing documentation structure in `.github/instructions/`
+- Focus on Angular-specific guidelines in `frameworks/angular/`
+- Apply universal patterns from `patterns/` directory
+- Use tool configurations from `tools/` directory
+
+### 2. PROJECT ANALYSIS
+- Analyze the current Angular project structure
+- Identify all components, services, pipes, directives, and modules
+- Examine existing dependencies and testing setup
+- Assess current test coverage (if any)
+
+### 3. TESTING IMPLEMENTATION
+Generate tests following the documented patterns for:
+
+#### Components (`frameworks/angular/component-testing.md`)
+- TestBed setup and component testing
+- Input/Output testing
+- User interaction testing
+- Lifecycle hooks testing
+- Template and styling testing
+
+#### Services (`frameworks/angular/service-testing.md`)
+- Dependency injection testing
+- HTTP service testing with HttpClientTestingModule
+- Business logic testing
+- Error handling testing
+
+#### Integration (`frameworks/angular/integration-testing.md`)
+- Module integration testing
+- Router testing
+- Form testing (Reactive and Template-driven)
+- Guard and resolver testing
+
+#### Mocking (`frameworks/angular/mocking-strategies.md`)
+- HttpClient mocking
+- Service mocking
+- Component mocking
+- External dependency mocking
+
+### 4. CONFIGURATION SETUP
+- Implement Jest/Jasmine configuration based on `tools/` documentation
+- Set up test utilities and helpers
+- Configure coverage reporting
+- Set up CI/CD testing pipeline
+
+### 5. PATTERN APPLICATION
+Apply patterns from `patterns/` directory:
+- Unit testing patterns for pure functions and utilities
+- Integration testing patterns for API and database interactions
+- E2E testing setup for critical user workflows
+- Performance testing for optimization
+
+## DELIVERABLES
+
+### Phase 1: Setup and Configuration
+1. Updated test configuration files (jest.config.js, tsconfig.spec.json, etc.)
+2. Test setup files and utilities
+3. Mock files and test helpers
+
+### Phase 2: Unit Tests
+1. Component tests for all components
+2. Service tests for all services
+3. Pipe tests for custom pipes
+4. Directive tests for custom directives
+
+### Phase 3: Integration Tests
+1. Module integration tests
+2. Router integration tests
+3. Form integration tests
+4. API integration tests
+
+### Phase 4: E2E Tests
+1. Critical user journey tests
+2. Cross-browser compatibility tests
+3. Performance tests for key workflows
+
+## QUALITY STANDARDS
+
+### Test Quality Requirements
+- Follow AAA pattern (Arrange-Act-Assert)
+- Use descriptive test names with GIVEN/WHEN/THEN structure
+- Achieve minimum 80% code coverage
+- Test behavior, not implementation details
+- Include error scenarios and edge cases
+
+### Code Quality Requirements
+- Follow Angular testing best practices
+- Use TypeScript strictly
+- Include proper type annotations
+- Follow consistent code formatting
+- Add comprehensive comments for complex test scenarios
+
+## EXECUTION APPROACH
+
+### Step 1: Analysis and Planning
+```typescript
+// First, analyze the project structure and create a testing plan
+console.log("Analyzing Angular project structure...");
+console.log("Reading .github/instructions/ documentation...");
+console.log("Creating comprehensive testing strategy...");
