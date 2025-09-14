@@ -1,53 +1,311 @@
-# Angular Component Testing
+# Angular Component Testing - Pragmatic Approach
 
-This guide covers comprehensive Angular component testing using TestBed, ComponentFixture, and Angular testing utilities.
+This guide covers **practical** Angular component testing focusing on real-world scenarios and common pitfalls.
 
-## Basic Component Testing
+## 🚨 Pre-Testing Component Analysis
 
-### Simple Component Testing
+**ALWAYS** perform this analysis before writing component tests:
+
+### 1. Component Architecture Review
 ```typescript
-// components/user-greeting.component.ts
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+// Read the actual component file to understand:
+// 1. Standalone vs NgModule
+// 2. Template structure (inline vs external)
+// 3. Child components used
+// 4. Services injected
+// 5. Signal vs Observable patterns
 
 @Component({
   selector: 'app-user-greeting',
+  standalone: true,  // ← Note: Standalone component
+  imports: [CommonModule, ButtonComponent], // ← Child components
   template: `
     <div data-testid="user-greeting">
-      <h1>Hello, {{ name }}!</h1>
-      <p *ngIf="showWelcome">Welcome to our application</p>
-      <button 
-        (click)="onGreet()" 
-        data-testid="greet-button"
-        [disabled]="disabled"
-      >
-        Say Hello
-      </button>
+      <h1>Hello, {{ name() }}!</h1>  // ← Signal-based
+      <app-button (click)="onGreet()">Say Hello</app-button>  // ← Custom component
     </div>
   `
 })
 export class UserGreetingComponent {
-  @Input() name: string = '';
-  @Input() showWelcome: boolean = false;
-  @Input() disabled: boolean = false;
-  @Output() greet = new EventEmitter<void>();
-
-  onGreet(): void {
-    this.greet.emit();
-  }
+  name = signal('');  // ← Signal pattern
+  private userService = inject(UserService);  // ← Injection pattern
 }
 ```
 
+### 2. Template Dependency Mapping
 ```typescript
-// components/user-greeting.component.spec.ts
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
-import { DebugElement } from '@angular/core';
-import { UserGreetingComponent } from './user-greeting.component';
+// Document all child components and their requirements:
+// - app-button → ButtonComponent
+// - app-input → InputComponent  
+// - app-modal → ModalComponent
+// These MUST be included in test configuration
+```
 
+### 3. Form Field Name Verification
+```typescript
+// Check actual formControlName values:
+// ❌ Assumption: formControlName="email"
+// ✅ Reality: formControlName="correo"
+// ❌ Assumption: formControlName="password" 
+// ✅ Reality: formControlName="clave"
+```
+
+## 🎯 Realistic Component Testing Patterns
+
+### Minimal Working Component Test
+```typescript
+// ✅ STEP 1: Analyze the component first
+// Component uses: app-button, signals, inject()
+// Form fields: correo, clave (not email, password)
+// Template: inline with data-testid attributes
+
+// ✅ STEP 2: Create test with ALL dependencies
 describe('GIVEN UserGreetingComponent', () => {
   let component: UserGreetingComponent;
   let fixture: ComponentFixture<UserGreetingComponent>;
-  let debugElement: DebugElement;
+  let userService: jasmine.SpyObj<UserService>;
+
+  beforeEach(async () => {
+    // ✅ Include ALL child components from template
+    const userServiceSpy = jasmine.createSpyObj('UserService', ['getUser']);
+    
+    await TestBed.configureTestingModule({
+      imports: [
+        UserGreetingComponent,  // ← Standalone component
+        ButtonComponent,        // ← Child component from template
+        ReactiveFormsModule     // ← Required for forms
+      ],
+      providers: [
+        { provide: UserService, useValue: userServiceSpy }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(UserGreetingComponent);
+    component = fixture.componentInstance;
+    userService = TestBed.inject(UserService) as jasmine.SpyObj<UserService>;
+  });
+
+  // ✅ STEP 3: Start with basic rendering test
+  it('WHEN component initializes THEN should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  // ✅ STEP 4: Test one meaningful interaction
+  it('WHEN greet button clicked THEN should emit greet event', () => {
+    spyOn(component.greet, 'emit');
+    
+    const button = fixture.debugElement.query(By.css('[data-testid="greet-button"]'));
+    button.nativeElement.click();
+    
+    expect(component.greet.emit).toHaveBeenCalled();
+  });
+});
+```
+
+### Form Component Testing (Based on Real Issues)
+
+**CRITICAL**: Form components require real child components, not mocks.
+
+```typescript
+// ❌ COMMON ERROR: Using mocks for form components
+// This BREAKS ControlValueAccessor and causes NG01203 errors
+const mockInput = jasmine.createSpyObj('CustomInputComponent', ['focus']);
+
+beforeEach(() => {
+  TestBed.configureTestingModule({
+    imports: [FormComponent, ReactiveFormsModule],
+    providers: [
+      { provide: CustomInputComponent, useValue: mockInput }  // ← BREAKS FORMS
+    ]
+  });
+});
+
+// ✅ CORRECT: Use real components for forms
+describe('GIVEN FormComponent', () => {
+  let component: FormComponent;
+  let fixture: ComponentFixture<FormComponent>;
+  let dataService: jasmine.SpyObj<DataService>;
+
+  beforeEach(async () => {
+    const dataServiceSpy = jasmine.createSpyObj('DataService', ['submitData']);
+    
+    // ✅ CRITICAL: Mock ALL observable properties if using services/facades
+    dataServiceSpy.isLoading$ = of(false);
+    dataServiceSpy.error$ = of(null);
+    
+    await TestBed.configureTestingModule({
+      imports: [
+        ReactiveFormsModule,        // ✅ REQUIRED for reactive forms
+        FormsModule,               // ✅ REQUIRED for template-driven forms  
+        CommonModule,              // ✅ REQUIRED for *ngIf, *ngFor
+        FormComponent,             // ✅ Main component
+        CustomInputComponent,      // ✅ Real custom input (ControlValueAccessor)
+        CustomButtonComponent,     // ✅ Real custom button
+        CustomSelectComponent,     // ✅ Any other custom form components
+        // Add ALL child components from your template
+      ],
+      providers: [
+        { provide: DataService, useValue: dataServiceSpy }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(FormComponent);
+    component = fixture.componentInstance;
+    dataService = TestBed.inject(DataService) as jasmine.SpyObj<DataService>;
+  });
+
+  // ✅ CRITICAL: Use ACTUAL field names from component template
+  it('WHEN valid data entered THEN form should be valid', () => {
+    // ✅ Check component source for actual formControlName values
+    // YOUR component template might use: formControlName="userEmail" and formControlName="userPassword"
+    // OR could be: formControlName="email" and formControlName="password"  
+    // OR could be in other languages: formControlName="correo" and formControlName="clave"
+    component.dataForm.patchValue({
+      userEmail: 'test@example.com',    // ← Use YOUR actual field names
+      userPassword: 'password123'       // ← Check YOUR component template
+    });
+
+    expect(component.dataForm.valid).toBeTruthy();
+  });
+
+  it('WHEN form submitted THEN should call data service', () => {
+    component.dataForm.patchValue({
+      userEmail: 'test@example.com',
+      userPassword: 'password123'
+    });
+
+    component.onSubmit();
+
+    expect(dataService.submitData).toHaveBeenCalledWith({
+      userEmail: 'test@example.com',
+      userPassword: 'password123'
+    });
+  });
+});
+```
+
+## 🚨 Common Pitfalls & Solutions
+
+### Issue 1: "Cannot read properties of null (reading 'nativeElement')"
+```typescript
+// ❌ Problem: Element not found due to missing child components
+const button = fixture.debugElement.query(By.css('[data-testid="submit-button"]'));
+button.nativeElement.click(); // ← null reference error
+
+// ✅ Solution: Include all child components in test config
+beforeEach(async () => {
+  await TestBed.configureTestingModule({
+    imports: [
+      YourComponent,
+      CustomButtonComponent,  // ← Missing this caused the error
+      CustomInputComponent    // ← Missing this too
+    ]
+  });
+});
+```
+
+### Issue 2: "NG0203: inject() must be called from an injection context"
+```typescript
+// ❌ Problem: Using inject() outside constructor in guards/services
+canActivate(): Observable<boolean> {
+  const user = toObservable(this.authService.currentUser); // ← inject context error
+}
+
+// ✅ Solution: Move to constructor or property initialization
+private currentUser$ = toObservable(this.authService.currentUser);
+
+canActivate(): Observable<boolean> {
+  return this.currentUser$.pipe(/*...*/);
+}
+```
+
+### Issue 3: Field Name Mismatches
+```typescript
+// ❌ Problem: Assuming field names
+expect(component.loginForm.get('email')?.value).toBe('test@example.com');
+setInputValue(fixture, '[data-testid="email-input"]', 'test@test.com');
+
+// ✅ Solution: Use actual field names from component
+expect(component.loginForm.get('correo')?.value).toBe('test@example.com');
+setInputValue(fixture, '[data-testid="email-input"]', 'test@test.com');
+```
+
+### Issue 4: Missing Service Methods
+```typescript
+// ❌ Problem: Spy doesn't include all methods used by component
+const serviceSpy = jasmine.createSpyObj('UbicacionService', ['getAll']);
+
+// ✅ Solution: Include ALL methods called by component
+const serviceSpy = jasmine.createSpyObj('UbicacionService', [
+  'getAll',
+  'searchUbicaciones',  // ← This was missing, causing "not a function" errors
+  'create',
+  'update'
+]);
+```
+
+## 📋 Pre-Test Checklist
+
+Before writing ANY component test:
+
+### ✅ Component Analysis
+- [ ] Read component imports and dependencies
+- [ ] Verify template structure (inline/external)
+- [ ] Document child components (app-input, app-button, etc.)
+- [ ] Check form field names (correo vs email, clave vs password)
+- [ ] Identify signal vs observable patterns
+
+### ✅ Template Structure
+- [ ] Confirm data-testid attributes exist
+- [ ] Map DOM hierarchy for selectors
+- [ ] Document conditional rendering (@if, *ngIf)
+- [ ] Identify form structure and validation
+
+### ✅ Service Dependencies
+- [ ] List all injected services
+- [ ] Document service method signatures
+- [ ] Check return types (Observable, Promise, Signal)
+- [ ] Verify HTTP endpoints and payloads
+
+## 🎯 Testing Priority Framework
+
+### Phase 1: Smoke Tests (Start Here)
+```typescript
+it('WHEN component initializes THEN should create', () => {
+  expect(component).toBeTruthy();
+});
+
+it('WHEN component renders THEN should display main elements', () => {
+  fixture.detectChanges();
+  const mainElement = fixture.debugElement.query(By.css('[data-testid="main-content"]'));
+  expect(mainElement).toBeTruthy();
+});
+```
+
+### Phase 2: Core Interactions
+```typescript
+it('WHEN user clicks submit THEN should call service', () => {
+  component.form.patchValue({ correo: 'test@test.com' });
+  
+  const submitButton = fixture.debugElement.query(By.css('[data-testid="submit-btn"]'));
+  submitButton.nativeElement.click();
+  
+  expect(mockService.submit).toHaveBeenCalled();
+});
+```
+
+### Phase 3: Edge Cases & Validation
+```typescript
+it('WHEN invalid data submitted THEN should show error', () => {
+  component.form.patchValue({ correo: '' });
+  component.form.markAllAsTouched();
+  fixture.detectChanges();
+  
+  const errorElement = fixture.debugElement.query(By.css('[data-testid="email-error"]'));
+  expect(errorElement.nativeElement.textContent).toContain('requerido');
+});
+```
+
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({

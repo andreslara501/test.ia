@@ -1,49 +1,175 @@
-# Angular Service Testing
+# Angular Service Testing - Real-World Patterns
 
-This guide covers comprehensive testing of Angular services, including dependency injection, HTTP services, and observable patterns.
+This guide focuses on **practical service testing** based on actual debugging experience and common pitfalls.
 
-## Basic Service Testing
+## 🚨 Pre-Testing Service Analysis
 
-### Simple Service Testing
+**ALWAYS** analyze the service before writing tests:
+
+### 1. Service Architecture Review
 ```typescript
-// services/calculation.service.ts
-import { Injectable } from '@angular/core';
+// Read the actual service to understand:
+// 1. Dependencies and injection patterns
+// 2. Method signatures and return types
+// 3. HTTP endpoints and data structures
+// 4. Signal vs Observable patterns
+// 5. Error handling strategies
 
 @Injectable({
   providedIn: 'root'
 })
-export class CalculationService {
-  add(a: number, b: number): number {
-    return a + b;
+export class AuthService {
+  private http = inject(HttpClient);  // ← Injection pattern
+  currentUser = signal<User | null>(null);  // ← Signal-based state
+  
+  // ✅ Document ACTUAL method signatures
+  login(credentials: LoginRequest): Observable<AuthResponse> {
+    return this.http.post<AuthResponse>('/api/auth/login', credentials);
   }
-
-  multiply(a: number, b: number): number {
-    return a * b;
-  }
-
-  divide(a: number, b: number): number {
-    if (b === 0) {
-      throw new Error('Division by zero is not allowed');
-    }
-    return a / b;
-  }
-
-  factorial(n: number): number {
-    if (n < 0) {
-      throw new Error('Factorial of negative number is not defined');
-    }
-    if (n === 0 || n === 1) {
-      return 1;
-    }
-    return n * this.factorial(n - 1);
+  
+  // ✅ Note: Some services may have methods you don't expect
+  searchUbicaciones(query: string): Observable<SearchUbicacionResponse> {
+    return this.http.get<SearchUbicacionResponse>(`/api/ubicaciones/search?q=${query}`);
   }
 }
 ```
 
+### 2. Interface Verification
 ```typescript
-// services/calculation.service.spec.ts
-import { TestBed } from '@angular/core/testing';
-import { CalculationService } from './calculation.service';
+// ✅ Always check actual interface definitions
+interface LoginRequest {
+  correo: string;  // ← NOT email
+  clave: string;   // ← NOT password
+}
+
+interface AuthResponse {
+  user: User;
+  token: string;
+  expiresIn: number;
+}
+```
+
+## 🎯 Realistic Service Testing Patterns
+
+### HTTP Service Testing (Based on Real Scenarios)
+```typescript
+// ✅ STEP 1: Analyze actual service implementation
+// Service uses: HttpClient, specific endpoints, real data structures
+// Methods: login(), getUsers(), searchUbicaciones() 
+// Interfaces: LoginRequest with correo/clave fields
+
+describe('GIVEN AuthService', () => {
+  let service: AuthService;
+  let httpMock: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      providers: [AuthService]
+    });
+    
+    service = TestBed.inject(AuthService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify(); // ✅ Always verify no outstanding requests
+  });
+
+  // ✅ STEP 2: Test with REAL data structures
+  it('WHEN login called THEN should send correct request', () => {
+    const credentials: LoginRequest = {
+      correo: 'test@example.com',  // ← Use actual field names
+      clave: 'password123'
+    };
+    
+    const mockResponse: AuthResponse = {
+      user: { id: '1', nombre: 'Test', correo: 'test@example.com' },
+      token: 'jwt-token',
+      expiresIn: 3600
+    };
+
+    service.login(credentials).subscribe(response => {
+      expect(response).toEqual(mockResponse);
+    });
+
+    // ✅ Verify actual endpoint and method
+    const req = httpMock.expectOne('/api/auth/login');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(credentials);
+    req.flush(mockResponse);
+  });
+
+  // ✅ STEP 3: Test methods that actually exist
+  it('WHEN searchUbicaciones called THEN should return search results', () => {
+    const query = 'Bogotá';
+    const mockResponse: SearchUbicacionResponse = {
+      ubicaciones: [
+        { id: '1', nombre: 'Bogotá', tipo: 'ciudad' }
+      ],
+      total: 1
+    };
+
+    service.searchUbicaciones(query).subscribe(response => {
+      expect(response.ubicaciones).toHaveLength(1);
+      expect(response.ubicaciones[0].nombre).toBe('Bogotá');
+    });
+
+    const req = httpMock.expectOne(`/api/ubicaciones/search?q=${query}`);
+    expect(req.request.method).toBe('GET');
+    req.flush(mockResponse);
+  });
+});
+```
+
+### Service with Dependencies (Common Pattern)
+```typescript
+// ✅ Testing services that depend on other services
+describe('GIVEN PropertyService', () => {
+  let service: PropertyService;
+  let httpMock: HttpTestingController;
+  let ubicacionService: jasmine.SpyObj<UbicacionService>;
+
+  beforeEach(() => {
+    // ✅ Create spy with ALL methods that component uses
+    const ubicacionSpy = jasmine.createSpyObj('UbicacionService', [
+      'getAll',
+      'searchUbicaciones',  // ← Don't forget this one!
+      'getById'
+    ]);
+
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      providers: [
+        PropertyService,
+        { provide: UbicacionService, useValue: ubicacionSpy }
+      ]
+    });
+    
+    service = TestBed.inject(PropertyService);
+    httpMock = TestBed.inject(HttpTestingController);
+    ubicacionService = TestBed.inject(UbicacionService) as jasmine.SpyObj<UbicacionService>;
+  });
+
+  it('WHEN getPropertiesByLocation called THEN should use ubicacion service', () => {
+    const locationId = '123';
+    const mockUbicacion = { id: '123', nombre: 'Bogotá' };
+    const mockProperties = [{ id: '1', titulo: 'Casa en Bogotá' }];
+
+    // ✅ Configure dependency spy
+    ubicacionService.getById.and.returnValue(of(mockUbicacion));
+
+    service.getPropertiesByLocation(locationId).subscribe(properties => {
+      expect(properties).toEqual(mockProperties);
+    });
+
+    expect(ubicacionService.getById).toHaveBeenCalledWith(locationId);
+    
+    const req = httpMock.expectOne(`/api/properties?location=${locationId}`);
+    req.flush(mockProperties);
+  });
+});
+```
 
 describe('GIVEN CalculationService', () => {
   let service: CalculationService;

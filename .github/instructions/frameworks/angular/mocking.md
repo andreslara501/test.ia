@@ -2,6 +2,155 @@
 
 This guide covers comprehensive mocking strategies for Angular testing, including services, HTTP calls, dependencies, and complex scenarios.
 
+## 🚨 CRITICAL: NgRx Store Mocking
+
+### When Components Use NgRx Store
+
+**Problem**: `NullInjectorError: No provider for Store!`
+
+Components that inject NgRx Store will fail without proper test setup:
+
+```typescript
+// Component that uses Store
+@Component({
+  selector: 'app-dashboard',
+  template: `
+    <div>{{ user$ | async }}</div>
+    <div>{{ isLoading$ | async }}</div>
+  `
+})
+export class DashboardComponent {
+  private store = inject(Store);
+  
+  user$ = this.store.select(selectUser);
+  isLoading$ = this.store.select(selectIsLoading);
+  
+  ngOnInit() {
+    this.store.dispatch(loadUser());
+  }
+}
+
+// ✅ SOLUTION: Use MockStore
+import { MockStore, provideMockStore } from '@ngrx/store/testing';
+
+describe('DashboardComponent', () => {
+  let component: DashboardComponent;
+  let fixture: ComponentFixture<DashboardComponent>;
+  let store: MockStore;
+
+  const initialState = {
+    auth: {
+      user: { id: '1', name: 'Test User' },
+      isAuthenticated: true,
+      isLoading: false,
+      error: null
+    }
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [DashboardComponent],
+      providers: [
+        provideMockStore({ initialState })
+      ]
+    }).compileComponents();
+
+    store = TestBed.inject(MockStore);
+    fixture = TestBed.createComponent(DashboardComponent);
+    component = fixture.componentInstance;
+  });
+
+  it('should dispatch loadData on init', () => {
+    spyOn(store, 'dispatch');
+    
+    component.ngOnInit();
+    
+    expect(store.dispatch).toHaveBeenCalledWith(loadData());
+  });
+
+  it('should select data from store', () => {
+    // Override specific selector for this test
+    store.overrideSelector(selectUserData, { id: '2', name: 'Test Data' });
+    store.refreshState();
+    
+    component.data$.subscribe(data => {
+      expect(data.name).toBe('Test Data');
+    });
+  });
+});
+```
+
+### Facade Pattern with NgRx
+
+**Problem**: Facades inject Store and expose observables that aren't mocked.
+
+```typescript
+// Generic DataFacade that wraps Store
+@Injectable()
+export class DataFacade {
+  private store = inject(Store);
+
+  // Observable properties - adapt to your domain
+  items$ = this.store.select(selectItems);
+  selectedItem$ = this.store.select(selectSelectedItem);
+  isLoading$ = this.store.select(selectIsLoading);
+  error$ = this.store.select(selectError);
+
+  // Action methods - adapt to your needs
+  loadData(params: any) {
+    this.store.dispatch(loadDataRequest(params));
+  }
+
+  clearData() {
+    this.store.dispatch(clearData());
+  }
+
+  // Synchronous getters (use firstValueFrom internally)  
+  getCurrentItem(): any | null {
+    return /* sync implementation using store */;
+  }
+}
+
+// ✅ SOLUTION: Mock ALL observable properties
+describe('ComponentUsingDataFacade', () => {
+  let dataFacadeSpy: jasmine.SpyObj<DataFacade>;
+
+  beforeEach(async () => {
+    const spy = jasmine.createSpyObj('DataFacade', [
+      'loadData',
+      'clearData', 
+      'getCurrentItem',
+      'refreshData'
+    ]);
+
+    // ✅ CRITICAL: Mock ALL observable properties your component uses
+    spy.items$ = of([]);
+    spy.selectedItem$ = of(null);
+    spy.isLoading$ = of(false);
+    spy.error$ = of(null);
+
+    await TestBed.configureTestingModule({
+      imports: [ComponentName],
+      providers: [
+        { provide: DataFacade, useValue: spy }
+      ]
+    }).compileComponents();
+
+    dataFacadeSpy = TestBed.inject(DataFacade) as jasmine.SpyObj<DataFacade>;
+  });
+
+  it('should handle data state', () => {
+    // Change observable value for specific test
+    dataFacadeSpy.isLoading$ = of(true);
+    dataFacadeSpy.items$ = of([{ id: '1', name: 'Test Item' }]);
+
+    fixture.detectChanges();
+
+    expect(component.isLoading).toBe(true);
+  });
+});
+```
+
 ## Service Mocking
 
 ### Basic Service Mocking with Jasmine Spies

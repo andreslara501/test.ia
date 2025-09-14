@@ -1,24 +1,173 @@
-# Angular Testing Guide
+# Angular Testing Guide - Pragmatic Implementation Strategy
 
-Welcome to the Angular testing documentation. This guide covers comprehensive testing strategies for Angular applications using Angular Testing Utilities, Jasmine, and Karma/Jest.
+Welcome to the Angular testing documentation. This guide focuses on **pragmatic testing strategies** for existing Angular projects with minimal or no test coverage.
 
-## Quick Start
+## 🎯 Core Philosophy
 
-### Installation and Setup
+**Start Small, Build Incrementally**: Instead of attempting 100% coverage immediately, focus on creating a solid foundation that can be expanded systematically.
 
-#### Default Angular Setup (Jasmine + Karma)
-```bash
-ng new my-app
-cd my-app
-npm test
+## 📋 Pre-Implementation Checklist
+
+### CRITICAL: Project Analysis Phase
+
+Before writing ANY tests, complete these steps:
+
+1. **📊 Codebase Inventory**
+   ```bash
+   # Scan the entire project structure
+   find src/app -name "*.ts" | head -20
+   find src/app -name "*.component.ts" | wc -l
+   find src/app -name "*.service.ts" | wc -l
+   ```
+
+2. **🔍 Dependency Mapping**
+   - Identify all shared components (custom input, button, modal components, etc.)
+   - Map interface definitions and their actual field names
+   - Document service method signatures
+   - List all custom types and enums
+
+3. **🏗️ Architecture Understanding**
+   - Standalone components vs NgModule structure
+   - Signal-based vs Observable patterns
+   - Form field naming conventions (could be any language)
+   - Route structure and guards
+
+4. **⚠️ Common Pitfall Prevention**
+   - Field name mismatches (check your actual form field names)
+   - Missing component dependencies in tests
+   - Injection context errors (toObservable, inject calls)
+   - Template structure vs test expectations
+   - **NEW**: NgRx Store provider missing (NullInjectorError)
+   - **NEW**: ControlValueAccessor issues with mock components
+   - **NEW**: Facade observable properties not mocked
+
+## Quick Start - Incremental Approach
+
+### Phase 1: Foundation Setup (Week 1)
+
+#### Target: 3-5 Critical Tests
+Focus on the most business-critical components:
+
+```typescript
+// Priority Order (adapt to your business domain):
+// 1. Core authentication/authorization components  
+// 2. Main business/domain components (orders, products, users, etc.)
+// 3. Data entry forms and validation
+// 4. Navigation and layout components
+// 5. API services and data processing
 ```
 
-#### Alternative Setup with Jest
+#### Test Configuration Validation
 ```bash
-ng add @briebug/jest-schematic
+# Verify test environment works
+ng test --watch=false --browsers=ChromeHeadless
 ```
 
-### Basic Angular Test Configuration
+### Phase 2: Service Layer (Week 2)
+
+#### Target: Core Services Testing
+```typescript
+// Focus on your core business services:
+- Primary data services (UserService, ProductService, etc.)
+- HTTP services with real API contracts
+- Data transformation and business logic services
+- Error handling patterns
+```
+
+### Phase 3: Component Integration (Week 3-4)
+
+#### Target: Component + Service Integration
+```typescript
+// Test realistic scenarios:
+- Form submission flows
+- Navigation patterns
+- Error state handling
+- Loading states
+```
+
+## 🛠️ Implementation Strategy
+
+### Critical Success Factors (Learned from Real Debugging)
+
+1. **Always Read First** - Analyze components/services before writing tests
+2. **Start Small** - 3-5 working tests beats 50 broken ones
+3. **Include Dependencies** - Child components, services, interfaces
+4. **Use Real Data** - Actual field names, endpoints, data structures
+5. **Verify Constantly** - Run tests after each change
+6. **NEW**: **NgRx Setup** - Always provide MockStore for components using Store
+7. **NEW**: **Real Components for Forms** - Never mock ControlValueAccessor components
+8. **NEW**: **Complete Facade Mocking** - Mock ALL observable properties on facades
+
+### Documentation Structure
+
+```
+frameworks/angular/
+├── README.md              ← You are here - start overview
+├── component-testing.md   ← Practical component testing patterns
+├── service-testing.md     ← Real-world service testing  
+├── integration.md         ← Component + service integration
+├── mocking.md            ← Service and HTTP mocking (includes NgRx)
+└── common-errors.md      ← Error catalog with solutions (includes NgRx Store errors)
+```
+
+## 🚨 CRITICAL: NgRx Testing Requirements
+
+**If your project uses NgRx Store**, you MUST include proper Store mocking:
+
+```typescript
+// ✅ Required imports for NgRx testing
+import { MockStore, provideMockStore } from '@ngrx/store/testing';
+
+// ✅ Basic NgRx test setup
+beforeEach(async () => {
+  await TestBed.configureTestingModule({
+    imports: [ComponentName],
+    providers: [
+      provideMockStore({
+        initialState: {
+          // Define your app's initial state structure
+          // Adapt these to match your application's state
+          featureA: { 
+            data: null, 
+            loading: false, 
+            error: null 
+          },
+          featureB: {
+            items: [],
+            selectedItem: null,
+            filters: {}
+          }
+          // Add your app's state slices here
+        }
+      })
+    ]
+  });
+});
+```
+
+**Common NgRx Errors to Prevent:**
+- `NullInjectorError: No provider for Store!`
+- `Cannot read properties of undefined (reading 'subscribe')`
+- Facade observable properties not mocked
+
+See [mocking.md](./mocking.md) for complete NgRx testing patterns.
+
+### Quick Start Commands
+
+```bash
+# 1. Analyze project structure
+find src/app -name "*.component.ts" | head -10
+find src/app -name "*.service.ts" | head -5
+
+# 2. Run existing tests (see what breaks)
+ng test --watch=false
+
+# 3. Start with one simple test
+# Create minimal component test following component-testing.md patterns
+
+# 4. Build incrementally  
+# Add one test at a time, verify each works
+```
 
 #### Karma Configuration (`karma.conf.js`)
 ```javascript
