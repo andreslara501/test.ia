@@ -2,52 +2,129 @@
 
 This guide covers comprehensive mocking strategies for React applications using Jest and React Testing Library.
 
+## Core Principles
+
+### When to Mock
+- External APIs and services
+- Complex child components in unit tests
+- Browser APIs (localStorage, fetch, etc.)
+- Third-party libraries
+- Heavy computation or side effects
+
+### When NOT to Mock
+- Simple components in integration tests
+- React built-in functionality
+- Your own business logic being tested
+
+## API Mocking
+
+### Mocking Fetch Requests
+```typescript
+// Mock fetch globally
+global.fetch = jest.fn();
+
+describe('GIVEN useUserData hook', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('WHEN user data loads successfully THEN should return user', async () => {
+    const mockUser = { id: '123', name: 'John Doe' };
+    
+    (fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockUser,
+    } as Response);
+
+    const { result } = renderHook(() => useUserData('123'));
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(mockUser);
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/users/123');
+  });
+
+  test('WHEN API call fails THEN should handle error', async () => {
+    (fetch as jest.MockedFunction<typeof fetch>).mockRejectedValueOnce(
+      new Error('Network error')
+    );
+
+    const { result } = renderHook(() => useUserData('123'));
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('Network error');
+    });
+  });
+});
+```
+
+### Mocking Axios
+```typescript
+import axios from 'axios';
+import { render, screen, waitFor } from '@testing-library/react';
+import { UserList } from './UserList';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+describe('GIVEN UserList component', () => {
+  test('WHEN component loads THEN should display users', async () => {
+    const mockUsers = [
+      { id: '1', name: 'John Doe' },
+      { id: '2', name: 'Jane Smith' }
+    ];
+
+    mockedAxios.get.mockResolvedValueOnce({ data: mockUsers });
+
+    render(<UserList />);
+
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+      expect(screen.getByText('Jane Smith')).toBeInTheDocument();
+    });
+
+    expect(mockedAxios.get).toHaveBeenCalledWith('/api/users');
+  });
+});
+```
+
 ## Component Mocking
 
 ### Mocking Child Components
 ```typescript
-// components/UserCard.tsx
-import React from 'react';
-import { Avatar } from './Avatar';
-import { Badge } from './Badge';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  status: 'online' | 'offline' | 'away';
-}
-
-interface UserCardProps {
-  user: User;
-  onClick?: (user: User) => void;
-}
-
-export function UserCard({ user, onClick }: UserCardProps) {
-  return (
-    <div 
-      data-testid="user-card"
-      onClick={() => onClick?.(user)}
-      className="user-card"
-    >
-      <Avatar src={user.avatar} alt={user.name} />
-      <div className="user-info">
-        <h3>{user.name}</h3>
-        <p>{user.email}</p>
-        <Badge status={user.status} />
-      </div>
-    </div>
-  );
-}
-
-// components/UserCard.test.tsx
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { UserCard } from './UserCard';
-
-// Mock child components
+// Mock complex child components for unit testing
 jest.mock('./Avatar', () => ({
+  Avatar: ({ alt, ...props }: any) => (
+    <div data-testid="avatar" aria-label={alt} {...props} />
+  )
+}));
+
+jest.mock('./Badge', () => ({
+  Badge: ({ status }: any) => (
+    <span data-testid="badge">{status}</span>
+  )
+}));
+
+describe('GIVEN UserCard component', () => {
+  const mockUser = {
+    id: '123',
+    name: 'John Doe',
+    email: 'john@example.com',
+    avatar: 'avatar.jpg',
+    status: 'online' as const
+  };
+
+  test('WHEN rendered THEN should display user information', () => {
+    render(<UserCard user={mockUser} />);
+
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('john@example.com')).toBeInTheDocument();
+    expect(screen.getByTestId('avatar')).toHaveAttribute('aria-label', 'John Doe');
+    expect(screen.getByTestId('badge')).toHaveTextContent('online');
+  });
+});
+```
   Avatar: ({ src, alt }: { src: string; alt: string }) => (
     <img data-testid="avatar" src={src} alt={alt} />
   )

@@ -2,13 +2,21 @@
 
 This guide covers comprehensive patterns for testing React components using React Testing Library.
 
-## Basic Component Testing
+## Core Principles
+
+### Test User Behavior, Not Implementation
+- Test what users see and interact with
+- Use semantic queries (byRole, byLabelText, byText)
+- Avoid testing internal state or implementation details
+- Focus on component output and behavior
+
+## Basic Component Testing Patterns
 
 ### Simple Component Test
 ```typescript
-import { render, screen } from '../test-utils';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Button } from './Button';
+import { Button } from './Button'; // Your existing component
 
 describe('GIVEN Button component', () => {
   test('WHEN rendered THEN should display text', () => {
@@ -28,6 +36,73 @@ describe('GIVEN Button component', () => {
   });
 
   test('WHEN disabled THEN should not be clickable', () => {
+    render(<Button disabled>Click me</Button>);
+    expect(screen.getByRole('button')).toBeDisabled();
+  });
+});
+```
+
+## Props Testing
+
+### Testing Different Prop Combinations
+```typescript
+describe('GIVEN Button with various props', () => {
+  test('WHEN variant is primary THEN should have primary class', () => {
+    render(<Button variant="primary">Primary</Button>);
+    expect(screen.getByRole('button')).toHaveClass('btn-primary');
+  });
+
+  test('WHEN size is large THEN should have large class', () => {
+    render(<Button size="large">Large</Button>);
+    expect(screen.getByRole('button')).toHaveClass('btn-large');
+  });
+
+  test('WHEN children is JSX THEN should render correctly', () => {
+    render(
+      <Button>
+        <span>Icon</span> Click me
+      </Button>
+    );
+    expect(screen.getByText('Icon')).toBeInTheDocument();
+    expect(screen.getByText('Click me')).toBeInTheDocument();
+  });
+});
+```
+
+## State Testing
+
+### Testing useState in Components
+```typescript
+// Example: Testing a counter component
+import { Counter } from './Counter'; // Your existing component
+
+describe('GIVEN Counter component', () => {
+  test('WHEN rendered THEN should show initial count', () => {
+    render(<Counter initialValue={5} />);
+    expect(screen.getByText('Count: 5')).toBeInTheDocument();
+  });
+
+  test('WHEN increment button clicked THEN should increase count', async () => {
+    const user = userEvent.setup();
+    render(<Counter initialValue={0} />);
+    
+    const incrementButton = screen.getByRole('button', { name: /increment/i });
+    await user.click(incrementButton);
+    
+    expect(screen.getByText('Count: 1')).toBeInTheDocument();
+  });
+
+  test('WHEN decrement button clicked THEN should decrease count', async () => {
+    const user = userEvent.setup();
+    render(<Counter initialValue={5} />);
+    
+    const decrementButton = screen.getByRole('button', { name: /decrement/i });
+    await user.click(decrementButton);
+    
+    expect(screen.getByText('Count: 4')).toBeInTheDocument();
+  });
+});
+```
     render(<Button disabled>Click me</Button>);
     expect(screen.getByRole('button')).toBeDisabled();
   });

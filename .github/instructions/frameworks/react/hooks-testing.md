@@ -2,32 +2,154 @@
 
 This guide covers testing custom React hooks using `@testing-library/react`.
 
-## Basic Hook Testing
+## Core Principles
 
-### Simple Custom Hook
+### Test Hook Behavior, Not Implementation
+- Focus on return values and their changes
+- Test side effects (API calls, localStorage, etc.)
+- Use `renderHook` for isolated hook testing
+- Test hooks both in isolation and within components
+
+## Basic Hook Testing Patterns
+
+### Simple State Hook
 ```typescript
-// hooks/useCounter.ts
-import { useState } from 'react';
-
-export function useCounter(initialValue = 0) {
-  const [count, setCount] = useState(initialValue);
-  
-  const increment = () => setCount(c => c + 1);
-  const decrement = () => setCount(c => c - 1);
-  const reset = () => setCount(initialValue);
-  
-  return { count, increment, decrement, reset };
-}
-
-// hooks/useCounter.test.ts
 import { renderHook, act } from '@testing-library/react';
-import { useCounter } from './useCounter';
+import { useCounter } from './useCounter'; // Your existing hook
 
 describe('GIVEN useCounter hook', () => {
   test('WHEN initialized THEN should start with default value', () => {
     const { result } = renderHook(() => useCounter());
     
     expect(result.current.count).toBe(0);
+  });
+
+  test('WHEN initialized with value THEN should start with that value', () => {
+    const { result } = renderHook(() => useCounter(10));
+    
+    expect(result.current.count).toBe(10);
+  });
+
+  test('WHEN increment is called THEN should increase count', () => {
+    const { result } = renderHook(() => useCounter(5));
+    
+    act(() => {
+      result.current.increment();
+    });
+    
+    expect(result.current.count).toBe(6);
+  });
+
+  test('WHEN decrement is called THEN should decrease count', () => {
+    const { result } = renderHook(() => useCounter(5));
+    
+    act(() => {
+      result.current.decrement();
+    });
+    
+    expect(result.current.count).toBe(4);
+  });
+});
+```
+
+## Data Fetching Hooks
+
+### Testing Async Hooks
+```typescript
+import { renderHook, waitFor } from '@testing-library/react';
+import { useUserData } from './useUserData'; // Your existing hook
+
+// Mock the fetch function
+global.fetch = jest.fn();
+
+describe('GIVEN useUserData hook', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('WHEN called with user ID THEN should fetch user data', async () => {
+    const mockUser = { id: '123', name: 'John Doe' };
+    (fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockUser,
+    } as Response);
+
+    const { result } = renderHook(() => useUserData('123'));
+
+    // Initially loading
+    expect(result.current.loading).toBe(true);
+    expect(result.current.data).toBe(null);
+
+    // Wait for fetch to complete
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.data).toEqual(mockUser);
+    expect(result.current.error).toBe(null);
+    expect(fetch).toHaveBeenCalledWith('/api/users/123');
+  });
+
+  test('WHEN API call fails THEN should set error state', async () => {
+    (fetch as jest.MockedFunction<typeof fetch>).mockRejectedValueOnce(
+      new Error('API Error')
+    );
+
+    const { result } = renderHook(() => useUserData('123'));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.data).toBe(null);
+    expect(result.current.error).toBe('API Error');
+  });
+});
+```
+
+## Local Storage Hooks
+
+### Testing Browser API Hooks
+```typescript
+import { renderHook, act } from '@testing-library/react';
+import { useLocalStorage } from './useLocalStorage'; // Your existing hook
+
+// Mock localStorage
+const localStorageMock = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+};
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
+describe('GIVEN useLocalStorage hook', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('WHEN initialized THEN should get value from localStorage', () => {
+    localStorageMock.getItem.mockReturnValue('stored-value');
+    
+    const { result } = renderHook(() => useLocalStorage('key', 'default'));
+    
+    expect(result.current.value).toBe('stored-value');
+    expect(localStorageMock.getItem).toHaveBeenCalledWith('key');
+  });
+
+  test('WHEN setValue is called THEN should update localStorage', () => {
+    localStorageMock.getItem.mockReturnValue(null);
+    
+    const { result } = renderHook(() => useLocalStorage('key', 'default'));
+    
+    act(() => {
+      result.current.setValue('new-value');
+    });
+    
+    expect(result.current.value).toBe('new-value');
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('key', 'new-value');
+  });
+});
+```
   });
 
   test('WHEN initialized with custom value THEN should start with that value', () => {

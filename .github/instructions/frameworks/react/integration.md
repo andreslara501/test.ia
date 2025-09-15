@@ -1,53 +1,105 @@
 # React Integration Testing
 
-This guide covers integration testing for React applications, focusing on testing multiple components working together.
+This guide covers integration testing for React applications, focusing on testing multiple components working together and real user workflows.
+
+## Core Principles
+
+### Test Real User Journeys
+- Test complete workflows users actually perform
+- Include multiple components working together
+- Test data flow between components
+- Verify side effects and state changes
 
 ## Component Integration Testing
 
 ### Testing Parent-Child Communication
 ```typescript
-// components/UserProfile.tsx
-import React, { useState } from 'react';
-import { UserDetails } from './UserDetails';
-import { UserActions } from './UserActions';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { UserProfile } from './UserProfile'; // Your existing component
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  isActive: boolean;
-}
-
-interface UserProfileProps {
-  user: User;
-  onUpdate: (user: User) => void;
-  onDelete: (userId: string) => void;
-}
-
-export function UserProfile({ user, onUpdate, onDelete }: UserProfileProps) {
-  const [isEditing, setIsEditing] = useState(false);
-
-  const handleSave = (updatedUser: User) => {
-    onUpdate(updatedUser);
-    setIsEditing(false);
+describe('GIVEN UserProfile integration', () => {
+  const mockUser = {
+    id: '123',
+    name: 'John Doe',
+    email: 'john@example.com',
+    isActive: true
   };
 
-  return (
-    <div data-testid="user-profile">
-      <UserDetails 
-        user={user} 
-        isEditing={isEditing}
-        onSave={handleSave}
-      />
-      <UserActions 
-        userId={user.id}
-        isActive={user.isActive}
-        onEdit={() => setIsEditing(true)}
-        onDelete={onDelete}
-      />
-    </div>
-  );
-}
+  test('WHEN user edits profile THEN should update and save', async () => {
+    const user = userEvent.setup();
+    const handleUpdate = jest.fn();
+    
+    render(<UserProfile user={mockUser} onUpdate={handleUpdate} />);
+    
+    // Start editing
+    await user.click(screen.getByRole('button', { name: /edit/i }));
+    
+    // Make changes
+    const nameInput = screen.getByDisplayValue('John Doe');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Jane Doe');
+    
+    // Save changes
+    await user.click(screen.getByRole('button', { name: /save/i }));
+    
+    // Verify integration
+    expect(handleUpdate).toHaveBeenCalledWith({
+      ...mockUser,
+      name: 'Jane Doe'
+    });
+    
+    // Verify UI updated
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+  });
+});
+```
+
+## Form Integration Testing
+
+### Testing Complete Form Workflows
+```typescript
+describe('GIVEN ContactForm integration', () => {
+  test('WHEN user submits valid form THEN should complete workflow', async () => {
+    const user = userEvent.setup();
+    const handleSubmit = jest.fn().mockResolvedValue(undefined);
+    
+    render(<ContactForm onSubmit={handleSubmit} />);
+    
+    // Fill form
+    await user.type(screen.getByLabelText(/name/i), 'John Doe');
+    await user.type(screen.getByLabelText(/email/i), 'john@example.com');
+    await user.type(screen.getByLabelText(/message/i), 'Hello world');
+    
+    // Submit
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    
+    // Verify submission
+    expect(handleSubmit).toHaveBeenCalledWith({
+      name: 'John Doe',
+      email: 'john@example.com',
+      message: 'Hello world'
+    });
+    
+    // Verify success state
+    expect(screen.getByText(/success/i)).toBeInTheDocument();
+  });
+
+  test('WHEN form has validation errors THEN should show all errors', async () => {
+    const user = userEvent.setup();
+    render(<ContactForm onSubmit={jest.fn()} />);
+    
+    // Submit empty form
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    
+    // Verify all validation errors appear
+    expect(screen.getByText(/name is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/email is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/message is required/i)).toBeInTheDocument();
+  });
+});
+```
 
 // components/UserProfile.test.tsx
 import React from 'react';
